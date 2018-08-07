@@ -1,0 +1,12 @@
+[Unit]
+Description=Usb Tether Control via Papirus
+After=network.target
+
+[Service]
+Restart=always
+ExecStart=/usr/local/bin/papirus-tether-control
+TimeoutStartSec=120
+TimeoutStopSec=60
+
+[Install]
+WantedBy=multi-user.target

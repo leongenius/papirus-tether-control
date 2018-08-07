@@ -1,0 +1,5 @@
+gpiozero==1.4.1
+papirus==1.0.0
+Pillow==4.0.0
+pyroute2==0.5.2
+RPi.GPIO==0.6.3
