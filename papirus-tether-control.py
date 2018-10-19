@@ -4,6 +4,7 @@
 from __future__ import print_function
 
 import os
+import re
 import sys
 import string
 import subprocess
@@ -67,8 +68,7 @@ if (os.path.exists(hatdir + '/product')) and (os.path.exists(hatdir + '/vendor')
 DOUBLE_PUSH_INTERVAL = timedelta(seconds=5)
 REFRESH_INTERVAL = timedelta(seconds=60)
 TIME_FMT = "%m/%d %H:%M:%S"
-USB0 = "usb0"
-USB1 = "usb1"
+USB_PATTERN = re.compile(r"^usb([0-9]*)$")
 HALT_CMD = "halt"
 REBOOT_CMD = "reboot"
 # Other global states
@@ -78,6 +78,7 @@ PapirusDevice = None
 LastShutdownPushTime = None
 PendingShutdown = None
 PendingReboot = None
+
 
 def main(argv):
     global SIZE
@@ -127,12 +128,11 @@ def main(argv):
                 handleReboot()
                 forceRefresh = True
             elif GPIO.input(SW3) == False:
-                # switch to usb1
-                switch_tether_device(USB1)
+                # switch to next usb network interface
+                use_next_usb_tether_device()
                 forceRefresh = True
             elif GPIO.input(SW4) == False:
-                # switch to usb0
-                switch_tether_device(USB0)
+                # do nothing...
                 forceRefresh = True
     
             clear_pending_states(False)
@@ -140,6 +140,7 @@ def main(argv):
         except Exception as ex:
             write_text(PapirusDevice, str(ex), SIZE)
         sleep(0.1)
+
 
 def write_text(papirus, text, size):
 
@@ -176,6 +177,7 @@ def write_text(papirus, text, size):
     papirus.display(image)
     papirus.partial_update()
 
+
 def get_status():
     status = ""
     # line 1: current oif
@@ -186,6 +188,7 @@ def get_status():
     status += get_pending_reboot_status()
     status += get_pending_shutdown_status()
     return status
+
 
 def get_default_route_status():
     try:
@@ -201,44 +204,62 @@ def get_default_route_status():
                 return ifName + "/" + gateway + "\n" 
     except Exception as ex:
         return "Exception: " + ex + "\n"
-    
+
+
 def get_refresh_time_status():
     return CurrentTime.strftime(TIME_FMT) + "\n"
+
 
 def get_pending_reboot_status():
     if (PendingReboot is not None):
         return "Press again to reboot\n"
     return ""
 
+
 def get_pending_shutdown_status():
     if (PendingShutdown is not None):
         return "Press again to shutdown\n"
     return ""
 
-def switch_tether_device(device):
-    if (device is not None):
-        with IPDB() as ipdb:
-            interfaces = ipdb.interfaces
-            ifNames = interfaces.keys()
-            try:
-                defaultRoute = ipdb.routes['default']
-            except:
-                pass
-            else:
-                if (device in ifNames):
-                    interface = interfaces[device]
-                    index = interface.index
-                    defaultRoute.oif = index
-                    # TODO: timeout after 5 seconds
-                    '''
-                    with DPCP4Socket(device) as dhclient:
-                        dhclient.put()
-                        dhcpLease = dhclient.get()
-                        gateway = dhcpLease['options']['router'][0]
-                        if gateway is not None:
-                            defaultRoute.gateway = gateway
-                    '''
-                    ipdb.commit()
+
+def get_usb_if_index(device):
+    if (device is not None and type(device) is str):
+        match = USB_PATTERN.match(device)
+        if (match is not None and len(match.group(1)) > 0):
+            return int(match.group(1))
+    return None
+
+
+def use_next_usb_tether_device():
+    with IPDB() as ipdb:
+        interfaces = ipdb.interfaces
+        ifNames = interfaces.keys()
+        usbIfNames = list(filter(lambda x: get_usb_if_index(x) is not None, ifNames))
+        usbIfIndices = list(map(lambda x: interfaces[x].index, usbIfNames))
+        usbIfIndices.sort()
+        if (len(usbIfIndices) <= 0):
+            return
+        try:
+            defaultRoute = ipdb.routes['default']
+        except:
+            pass
+        else:
+            currentOifIndex = defaultRoute.oif
+            candidateOifIndices = list(filter(lambda x: x > currentOifIndex, usbIfIndices))
+            nextOifIndex = candidateOifIndices[0] if len(candidateOifIndices) > 0 else usbIfIndices[0]
+            if (nextOifIndex != currentOifIndex):
+                defaultRoute.oif = nextOifIndex
+            # TODO: timeout after 5 seconds
+            '''
+            with DPCP4Socket(device) as dhclient:
+                dhclient.put()
+                dhcpLease = dhclient.get()
+                gateway = dhcpLease['options']['router'][0]
+                if gateway is not None:
+                    defaultRoute.gateway = gateway
+            '''
+            ipdb.commit()
+
 
 def refresh_dashboard(force=False):
     global NextRefresh
@@ -249,8 +270,10 @@ def refresh_dashboard(force=False):
         if (PapirusDevice is not None):
             write_text(PapirusDevice, dashboardStatus, SIZE)
 
+
 def should_refresh_dashboard():
     return NextRefresh <= CurrentTime
+
 
 def clear_pending_states(force=False):
     global PendingShutdown
@@ -266,6 +289,7 @@ def clear_pending_states(force=False):
             NextRefresh = CurrentTime
             PendingReboot = None
 
+
 def handleReboot():
     global PendingReboot
     if (PendingReboot is None):
@@ -280,6 +304,7 @@ def handleReboot():
         finally:
             clear_pending_states(True)
 
+
 def handleShutdown():
     global PendingShutdown
     if (PendingShutdown is None):
@@ -293,6 +318,7 @@ def handleShutdown():
             write_text(PapirusDevice, str(ex), SIZE)
         finally:
             clear_pending_states(True)
+
 
 if __name__ == '__main__':
     try:
