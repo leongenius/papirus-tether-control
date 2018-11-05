@@ -4,7 +4,7 @@ After=network.target
 
 [Service]
 Restart=always
-ExecStart=/usr/local/bin/papirus-tether-control
+ExecStart=/usr/local/bin/papirus-tether-control usb0 usb1 eth1
 TimeoutStartSec=120
 TimeoutStopSec=60
 

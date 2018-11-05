@@ -1,13 +1,11 @@
 #!/usr/bin/env python3
 # Based on papirus-button example
+# Usage: papirus-tether-control iface1 [iface2 iface3...]
 
 from __future__ import print_function
 
 import os
-import re
 import sys
-import string
-import subprocess
 from papirus import Papirus
 from PIL import Image
 from PIL import ImageDraw
@@ -15,7 +13,6 @@ from PIL import ImageFont
 from time import sleep
 from datetime import datetime, timedelta
 from pyroute2 import IPDB
-from pyroute2.dhcp.dhcp4socket import DHCP4Socket 
 import RPi.GPIO as GPIO
 
 # Check EPD_SIZE is defined
@@ -68,7 +65,6 @@ if (os.path.exists(hatdir + '/product')) and (os.path.exists(hatdir + '/vendor')
 DOUBLE_PUSH_INTERVAL = timedelta(seconds=5)
 REFRESH_INTERVAL = timedelta(seconds=60)
 TIME_FMT = "%m/%d %H:%M:%S"
-USB_PATTERN = re.compile(r"^usb([0-9]*)$")
 HALT_CMD = "halt"
 REBOOT_CMD = "reboot"
 # Other global states
@@ -78,9 +74,9 @@ PapirusDevice = None
 LastShutdownPushTime = None
 PendingShutdown = None
 PendingReboot = None
+AllCandIfs = sys.argv[1:]
 
-
-def main(argv):
+def main():
     global SIZE
     global PapirusDevice
     global CurrentTime
@@ -94,8 +90,7 @@ def main(argv):
     if SW5 != -1:
         GPIO.setup(SW5, GPIO.IN)
 
-    PapirusDevice = Papirus(rotation = int(argv[0]) if len(sys.argv) > 1 else 0)
-
+    PapirusDevice = Papirus(rotation=0)
 
     # Use smaller font for smaller displays
     if PapirusDevice.height <= 96:
@@ -222,19 +217,11 @@ def get_pending_shutdown_status():
     return ""
 
 
-def get_usb_if_index(device):
-    if (device is not None and type(device) is str):
-        match = USB_PATTERN.match(device)
-        if (match is not None and len(match.group(1)) > 0):
-            return int(match.group(1))
-    return None
-
-
 def use_next_usb_tether_device():
     with IPDB() as ipdb:
         interfaces = ipdb.interfaces
         ifNames = interfaces.keys()
-        usbIfNames = list(filter(lambda x: get_usb_if_index(x) is not None, ifNames))
+        usbIfNames = list(filter(lambda x : x in AllCandIfs, ifNames))
         usbIfIndices = list(map(lambda x: interfaces[x].index, usbIfNames))
         usbIfIndices.sort()
         if (len(usbIfIndices) <= 0):
@@ -322,6 +309,6 @@ def handleShutdown():
 
 if __name__ == '__main__':
     try:
-        main(sys.argv[1:])
+        main()
     except KeyboardInterrupt:
         sys.exit('interrupted')
