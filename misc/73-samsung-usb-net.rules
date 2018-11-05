@@ -1,0 +1,6 @@
+# Samsung usb tethering
+# Installation target: /etc/udev/rules.d/73-samsung-usb-net.rules
+
+ACTION=="add", SUBSYSTEM=="net", ENV{ID_VENDOR_ID}=="04e8", ENV{ID_USB_DRIVER}=="rndis_host", \
+  RUN+="/usr/local/bin/samsung-usb-tether.sh $env{INTERFACE}", \
+  OPTIONS="last_rule"
